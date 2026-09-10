@@ -34,8 +34,8 @@ sync *args:
     fi; \
     current=$$(git branch --show-current); \
     echo "Syncing all tracked local branches (fast-forward only)..."; \
-    while IFS='|' read -r branch upstream; do \
-      [ -n "$$branch" ] || continue; \
+    for branch in $$(git for-each-ref --format='%(refname:short)' refs/heads/); do \
+      upstream=$$(git for-each-ref --format='%(upstream:short)' "refs/heads/$$branch"); \
       if [ -z "$$upstream" ]; then \
         printf '%-24s %s\n' "$$branch" "SKIP  no upstream"; \
         continue; \
@@ -71,7 +71,7 @@ sync *args:
       else \
         printf '%-24s %s\n' "$$branch" "SKIP  diverged"; \
       fi; \
-    done < <(git for-each-ref --format='%(refname:short)|%(upstream:short)' refs/heads/); \
+    done; \
     echo; \
     git status --short --branch
 
