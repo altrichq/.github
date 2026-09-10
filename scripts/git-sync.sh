@@ -6,55 +6,75 @@ sync_all=${1:-false}
 echo "Fetching remotes..."
 git fetch --all --prune
 
+attach_upstream_if_obvious() {
+  branch="$1"
+  upstream=$(git for-each-ref --format='%(upstream:short)' "refs/heads/$branch")
+
+  if [ -n "$upstream" ] && git rev-parse --verify --quiet "$upstream^{commit}" >/dev/null; then
+    printf '%s' "$upstream"
+    return 0
+  fi
+
+  candidate="origin/$branch"
+  if git rev-parse --verify --quiet "$candidate^{commit}" >/dev/null; then
+    git branch --set-upstream-to="$candidate" "$branch" >/dev/null 2>&1 || true
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  printf '%s' ""
+}
+
 if [ "$sync_all" != "true" ]; then
   branch=$(git branch --show-current)
   if [ -z "$branch" ]; then
     echo "Detached HEAD; fetched remotes only."
-  elif git rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
-    git pull --rebase --autostash
-  else
-    echo "No upstream configured for $branch; fetched remotes only."
+    git status --short --branch
+    exit 0
   fi
+
+  upstream=$(attach_upstream_if_obvious "$branch")
+  if [ -z "$upstream" ]; then
+    echo "No usable upstream found for $branch; fetched remotes only."
+    git status --short --branch
+    exit 0
+  fi
+
+  git pull --rebase --autostash
   git status --short --branch
   exit 0
 fi
 
 current=$(git branch --show-current)
-echo "Syncing all tracked local branches (fast-forward only)..."
+echo "Syncing all local branches (fast-forward only)..."
 
 for branch in $(git for-each-ref --format='%(refname:short)' refs/heads/); do
-  upstream=$(git for-each-ref --format='%(upstream:short)' "refs/heads/$branch")
+  upstream=$(attach_upstream_if_obvious "$branch")
+
   if [ -z "$upstream" ]; then
-    printf '%-24s %s\n' "$branch" "SKIP  no upstream"
+    printf '%-24s %s\n' "$branch" "SKIP  no matching remote"
     continue
   fi
-  if ! git rev-parse --verify --quiet "$upstream^{commit}" >/dev/null; then
-    printf '%-24s %s\n' "$branch" "SKIP  upstream missing"
+
+  if [ "$branch" = "$current" ] && [ -n "$(git status --porcelain)" ]; then
+    printf '%-24s %s\n' "$branch" "SKIP  current branch has changes"
     continue
   fi
-  if [ "$branch" = "$current" ]; then
-    if [ -n "$(git status --porcelain)" ]; then
-      printf '%-24s %s\n' "$branch" "SKIP  current branch has changes"
-      continue
-    fi
-    if git merge-base --is-ancestor "$branch" "$upstream"; then
-      before=$(git rev-parse "$branch")
-      git merge --ff-only --quiet "$upstream"
-      after=$(git rev-parse "$branch")
-      [ "$before" = "$after" ] && state="OK    up to date" || state="OK    updated"
-      printf '%-24s %s\n' "$branch" "$state"
-    else
-      printf '%-24s %s\n' "$branch" "SKIP  diverged"
-    fi
+
+  local_sha=$(git rev-parse "$branch")
+  remote_sha=$(git rev-parse "$upstream")
+
+  if [ "$local_sha" = "$remote_sha" ]; then
+    printf '%-24s %s\n' "$branch" "OK    up to date"
   elif git merge-base --is-ancestor "$branch" "$upstream"; then
-    before=$(git rev-parse "$branch")
-    after=$(git rev-parse "$upstream")
-    if [ "$before" = "$after" ]; then
-      printf '%-24s %s\n' "$branch" "OK    up to date"
+    if [ "$branch" = "$current" ]; then
+      git merge --ff-only --quiet "$upstream"
     else
       git branch -f "$branch" "$upstream" >/dev/null
-      printf '%-24s %s\n' "$branch" "OK    updated"
     fi
+    printf '%-24s %s\n' "$branch" "OK    updated"
+  elif git merge-base --is-ancestor "$upstream" "$branch"; then
+    printf '%-24s %s\n' "$branch" "KEEP  local commits ahead"
   else
     printf '%-24s %s\n' "$branch" "SKIP  diverged"
   fi
