@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Altric TypeScript application repositories.",
+    "For altrichq/altric, altrichq/homepage, and any Node service added later -- Calendar included. A new repo should need a renovate.json of about five lines: extend this, name its base branch, done.",
+    "Base branches are NOT set here. Every repo has a different development branch and getting that wrong points dependency PRs at a branch that deploys."
+  ],
+
+  "extends": ["github>altrichq/.github"],
+
+  "enabledManagers": [
+    "npm",
+    "nvm",
+    "github-actions",
+    "dockerfile",
+    "docker-compose"
+  ],
+
+  "npm": {
+    "minimumReleaseAge": "3 days"
+  },
+
+  "postUpdateOptions": ["pnpmDedupe"],
+
+  "packageRules": [
+    {
+      "description": "Type packages follow their runtime package rather than arriving separately. A @types bump on its own is noise; alongside the library it describes it is context.",
+      "matchPackageNames": ["/^@types\\//"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "low-risk updates",
+      "groupSlug": "low-risk",
+      "automerge": false
+    },
+    {
+      "description": "Tailwind and PostCSS move the rendered output of every page without touching a line of markup, so a patch is still worth a look on its own.",
+      "matchPackageNames": [
+        "tailwindcss",
+        "/^@tailwindcss\\//",
+        "postcss",
+        "autoprefixer"
+      ],
+      "groupName": null,
+      "labels": ["dependencies", "design"],
+      "automerge": false
+    }
+  ]
+}

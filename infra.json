@@ -1,0 +1,63 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Altric infrastructure repositories (altrichq/altric-infra).",
+    "The hard constraint here is that Renovate is not the only automation writing to this repo. Flux owns an image update path, and two bots editing the same line is worse than neither.",
+    "Flux's files are excluded via ignorePaths rather than a packageRule with enabled:false. Both would suppress the update, but ignorePaths excludes at extraction, which means `renovate --platform=local --dry-run=extract` shows the file absent and the exclusion is something you can see rather than something you have to trust.",
+    "Everything Renovate touches in an infra repo can change production on merge, so nothing is grouped and nothing is automerged -- the PR is the review surface."
+  ],
+
+  "extends": ["github>altrichq/.github"],
+
+  "enabledManagers": ["kubernetes", "helmv3", "flux", "github-actions", "dockerfile"],
+
+  "kubernetes": {
+    "description": "The kubernetes manager ships with NO default file patterns -- it detects nothing until it is told where to look, and silently finds zero dependencies if you forget. This was caught by a dry run that extracted two GitHub Actions and not one container image.",
+    "managerFilePatterns": ["/clusters/.+\\.ya?ml$/"]
+  },
+
+  "flux": {
+    "description": "HelmRelease and HelmRepository documents live beside the manifests rather than in a .flux directory, so the default patterns do not reach them.",
+    "managerFilePatterns": ["/clusters/.+\\.ya?ml$/"]
+  },
+
+  "ignorePaths": [
+    "clusters/**/flux-system/**",
+    "clusters/altric/app.yaml",
+    "clusters/altric/homepage/homepage.yaml",
+    "clusters/altric/image-automation.yaml"
+  ],
+
+  "packageRules": [
+    {
+      "description": "Turn off apiVersion bumps. The kubernetes manager treats `apiVersion: apps/v1` as a dependency and will offer to raise it, but moving a Kubernetes API version is a hand-checked migration against the cluster's own version -- not something to accept from a PR body. Caught by a dry run that listed Deployment, HelmRelease and ImagePolicy as upgradable dependencies.",
+      "matchDatasources": ["kubernetes-api"],
+      "enabled": false
+    },
+
+    {
+      "description": "Everything else in clusters/ is pinned by hand and updated by nobody -- Postgres, Redis, Temporal, the Lago images. That is what Renovate is here for. One PR per image: a manifest change under prune: true is a production change, and a rollback has to be a single revert.",
+      "matchManagers": ["kubernetes", "docker-compose", "dockerfile"],
+      "groupName": null,
+      "labels": ["dependencies", "infrastructure"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Postgres and Redis majors are data migrations. They reach the dashboard like every other major and should not be ticked without a restore tested first.",
+      "matchPackageNames": ["postgres", "redis", "/postgres-partman/"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "infrastructure", "major"],
+      "automerge": false
+    },
+    {
+      "description": "Helm chart versions are pinned in HelmRelease and Flux does not move them. Renovate does, one chart at a time.",
+      "matchManagers": ["helmv3", "flux"],
+      "groupName": null,
+      "labels": ["dependencies", "infrastructure"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    }
+  ]
+}

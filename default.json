@@ -1,0 +1,305 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Altric organization-wide Renovate base preset.",
+    "Extended by every altrichq repository. Repository configs should stay thin: a base branch, a manager selection, and anything genuinely repo-specific. Everything shared belongs here so a policy change is one commit, not four.",
+    "The rule this file exists to enforce: Renovate opens and refreshes pull requests. It never merges one. Release branches are Eli's."
+  ],
+
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":rebaseStalePrs"
+  ],
+
+  "timezone": "Africa/Lagos",
+
+  "schedule": ["after 2:00am and before 4:00am"],
+
+  "automerge": false,
+  "platformAutomerge": false,
+
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Dependency dashboard",
+
+  "prConcurrentLimit": 4,
+  "prHourlyLimit": 2,
+  "branchConcurrentLimit": 6,
+
+  "labels": ["dependencies", "maintenance"],
+
+  "separateMajorMinor": true,
+  "separateMultipleMajor": false,
+
+  "rangeStrategy": "bump",
+
+  "lockFileMaintenance": {
+    "description": "Refresh transitive dependencies once a week rather than never. Monday inside the maintenance window, so it lands before the week starts rather than mid-afternoon.",
+    "enabled": true,
+    "schedule": ["* 2-4 * * 1"],
+    "automerge": false,
+    "commitMessageAction": "Refresh",
+    "labels": ["dependencies", "maintenance"]
+  },
+
+  "vulnerabilityAlerts": {
+    "description": "The one thing allowed out of the maintenance window. A CVE fix waiting until 2am tomorrow for politeness is not politeness. It is still a PR: urgent means surfaced now, never merged now.",
+    "enabled": true,
+    "schedule": ["at any time"],
+    "automerge": false,
+    "minimumReleaseAge": null,
+    "labels": ["dependencies", "security"],
+    "addLabels": ["security"]
+  },
+  "osvVulnerabilityAlerts": true,
+
+  "minimumReleaseAge": "3 days",
+
+  "packageRules": [
+    {
+      "description": "Nothing merges itself, anywhere, under any match. Restated as the first rule so a later rule cannot quietly re-enable it -- Renovate applies packageRules in order and the last match wins, which makes an automerge added below this line effective. Do not add one.",
+      "matchPackageNames": ["*"],
+      "automerge": false,
+      "platformAutomerge": false
+    },
+
+    {
+      "description": "Majors never open a PR on their own. They land on the dependency dashboard and wait for a human to tick the box. A major is a migration wearing a version number, and four of them arriving as PRs in one morning is how a dependency bot gets muted.",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "major"],
+      "automerge": false
+    },
+
+    {
+      "description": "Everything low-risk in one PR a week. Patch and minor on ordinary packages carry little enough risk individually that reviewing them one at a time costs more attention than it saves.",
+      "matchUpdateTypes": ["patch", "minor"],
+      "matchCurrentVersion": "!/^0/",
+      "groupName": "low-risk updates",
+      "groupSlug": "low-risk",
+      "automerge": false
+    },
+
+    {
+      "description": "0.x is not semver in practice. A 0.x minor is a breaking change often enough that grouping it with patches hides it.",
+      "matchCurrentVersion": "/^0/",
+      "matchUpdateTypes": ["minor"],
+      "groupName": null,
+      "labels": ["dependencies", "maintenance"],
+      "automerge": false
+    },
+
+    {
+      "description": "Runtime and framework. Its own PR, never grouped, because a rollback needs to be one revert. Next and React move the whole rendering path; Nest moves the whole backend.",
+      "groupName": null,
+      "matchPackageNames": [
+        "next",
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom",
+        "/^@nestjs\\//",
+        "/^@next\\//",
+        "typescript",
+        "node",
+        "/^@types\\/node$/"
+      ],
+      "labels": ["dependencies", "runtime"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "Database and cache clients. A driver change can be silently wrong rather than loudly broken -- wrong pool behaviour, a changed default isolation level -- so these get read individually.",
+      "groupName": null,
+      "matchPackageNames": [
+        "prisma",
+        "/^@prisma\\//",
+        "pg",
+        "/^pg-/",
+        "postgres",
+        "postgresql",
+        "/^@neondatabase\\//",
+        "ioredis",
+        "redis",
+        "/^@redis\\//",
+        "bullmq"
+      ],
+      "labels": ["dependencies", "database"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "Workflow engine. Temporal versions the server and the SDK together; a mismatched pair fails at task-queue level rather than at build.",
+      "groupName": null,
+      "matchPackageNames": [
+        "/^@temporalio\\//",
+        "/^temporalio\\//",
+        "temporalio/auto-setup",
+        "temporalio/ui-server"
+      ],
+      "labels": ["dependencies", "workflow"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "Authentication and anything holding a credential or a token. Read every line of these. A silent behaviour change here is a security incident, not a bug.",
+      "groupName": null,
+      "matchPackageNames": [
+        "better-auth",
+        "/^@better-auth\\//",
+        "/^next-auth$/",
+        "/^@auth\\//",
+        "jsonwebtoken",
+        "jose",
+        "/^@node-saml\\//",
+        "passport",
+        "/^passport-/",
+        "bcrypt",
+        "bcryptjs",
+        "argon2",
+        "openid-client",
+        "oauth4webapi",
+        "/^@octokit\\//",
+        "helmet",
+        "cookie",
+        "csrf",
+        "/^@fastify\\/(cookie|session|csrf-protection)$/"
+      ],
+      "labels": ["dependencies", "security", "auth"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "Time. Altric schedules posts, so a timezone or DST change is a product bug that only appears at the wrong hour in the wrong month. Calendar makes this worse, not better.",
+      "groupName": null,
+      "matchPackageNames": [
+        "dayjs",
+        "date-fns",
+        "/^date-fns-/",
+        "luxon",
+        "/^@types\\/luxon$/",
+        "moment",
+        "moment-timezone",
+        "/^@js-joda\\//",
+        "rrule",
+        "ical",
+        "ical.js",
+        "ical-generator",
+        "node-ical",
+        "tzdata",
+        "/^@date-fns\\//",
+        "temporal-polyfill",
+        "cron",
+        "cron-parser",
+        "node-cron",
+        "croner"
+      ],
+      "labels": ["dependencies", "time"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "Calendar and identity providers. Google and Microsoft deprecate on their own schedule and the failure is a 400 from an API, not a failed build. Named here ahead of the Calendar service existing so it inherits the rule rather than rediscovering it.",
+      "groupName": null,
+      "matchPackageNames": [
+        "googleapis",
+        "/^@google-cloud\\//",
+        "/^@googleapis\\//",
+        "google-auth-library",
+        "/^@microsoft\\/microsoft-graph-client$/",
+        "/^@microsoft\\/microsoft-graph-types/",
+        "/^@azure\\/msal-/",
+        "/^@azure\\/identity$/"
+      ],
+      "labels": ["dependencies", "providers"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "Money. A payment library changing behaviour costs real naira and the evidence arrives from a customer, not from CI.",
+      "groupName": null,
+      "matchPackageNames": [
+        "stripe",
+        "/^@stripe\\//",
+        "paystack",
+        "/^paystack-/",
+        "/^@paystack\\//",
+        "flutterwave-node-v3",
+        "/^@lago-/",
+        "lago-javascript-client"
+      ],
+      "labels": ["dependencies", "payments"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "Social platform SDKs. The scheduling product is only as correct as these, and a provider breaking change shows up as a post that silently never left.",
+      "groupName": null,
+      "matchPackageNames": [
+        "/^twitter-api/",
+        "/^@atproto\\//",
+        "/^linkedin/",
+        "/^instagram/",
+        "/^facebook-nodejs/",
+        "/^@slack\\//",
+        "/^discord\\.js$/",
+        "/^@discordjs\\//",
+        "mastodon-api",
+        "/^tiktok/",
+        "/^@mastra\\//"
+      ],
+      "labels": ["dependencies", "providers"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "Container base images and Kubernetes tooling. These change what runs in production rather than what is built, so they are read one at a time regardless of semver distance.",
+      "matchManagers": ["dockerfile", "docker-compose", "kubernetes", "helmv3", "flux"],
+      "groupName": null,
+      "labels": ["dependencies", "infrastructure"],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+
+    {
+      "description": "GitHub Actions. Patch and minor group; majors go to the dashboard with everything else. Tags rather than digests, deliberately -- the org pins on tags today and switching to digests would rewrite every workflow every week for a threat model nobody has agreed to.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "github actions",
+      "groupSlug": "github-actions",
+      "labels": ["dependencies", "ci"],
+      "automerge": false
+    },
+
+    {
+      "description": "Blacksmith's runner actions are tied to the runner images this org builds on. Never grouped, so a CI failure traces to one line.",
+      "matchPackageNames": ["/^useblacksmith\\//"],
+      "groupName": null,
+      "labels": ["dependencies", "ci"],
+      "automerge": false
+    }
+  ],
+
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/__fixtures__/**",
+    "**/test/fixtures/**"
+  ],
+
+  "prBodyNotes": [
+    "---",
+    "**This PR does not merge itself.** Renovate has no automerge anywhere in the Altric organization, and no release branch accepts a bot merge. A green CI result here means the change builds, not that it ships.",
+    "Release branches (`altric` in altrichq/altric, `main` in altrichq/homepage) are merged by a human, deliberately."
+  ]
+}

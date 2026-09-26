@@ -1,0 +1,193 @@
+name: Maintenance health
+
+# Reusable. Every altrichq repository calls this with a four-line caller; the
+# logic lives here once.
+#
+# WHAT THIS IS FOR, and what it deliberately is not.
+#
+# Renovate already watches dependencies. GitHub already watches vulnerabilities.
+# The repositories already run their own CI. Adding a nightly job that re-checks
+# any of those would be a second opinion nobody asked for and a second inbox to
+# ignore.
+#
+# The gap none of them cover is the automation itself going quiet. A scheduled
+# workflow that starts failing every week fails silently -- there is no PR, no
+# alert, and nobody opens the Actions tab of a repo that is working. The secrets
+# audit in altric-infra is the live example: without ALTRIC_REPO_TOKEN it warns
+# and exits successfully, forever, and the only evidence is a log nobody reads.
+#
+# So this job watches the watchers, and nothing else.
+#
+# It is silent when everything is healthy. It does not post "all good" and it
+# does not open a second issue for a failure it already reported -- it keeps one
+# issue, updates it in place, and closes it when the failure clears.
+
+on:
+  workflow_call:
+    inputs:
+      stale_after_days:
+        description: "Flag a scheduled workflow whose last run is older than this."
+        type: number
+        default: 8
+      ignore_workflows:
+        description: "Newline-separated workflow file names to skip."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  health:
+    name: Check scheduled automation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Assess
+        id: assess
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          STALE_DAYS: ${{ inputs.stale_after_days }}
+          IGNORE: ${{ inputs.ignore_workflows }}
+        run: |
+          set -uo pipefail
+
+          default_branch="$(gh api "repos/$REPO" --jq .default_branch)"
+          now=$(date -u +%s)
+          : > findings.txt
+
+          # Only workflows defined in this repo. The dynamic ones GitHub
+          # synthesises (Dependabot, CodeQL default setup) have no file and no
+          # schedule we control, so judging them here would produce findings
+          # nobody can act on in a commit.
+          gh api --paginate "repos/$REPO/actions/workflows" \
+            --jq '.workflows[] | select(.state == "active") | select(.path | startswith(".github/workflows/")) | [.id, .path, .name] | @tsv' \
+            > workflows.tsv
+
+          while IFS=$'\t' read -r id path name; do
+            file="${path##*/}"
+            if [ -n "${IGNORE:-}" ] && grep -qxF "$file" <<< "$IGNORE"; then
+              continue
+            fi
+
+            # Does it run on a schedule? Read the file rather than guessing from
+            # the name. A workflow with no schedule cannot be "overdue".
+            scheduled=no
+            if gh api "repos/$REPO/contents/$path" --jq '.content' 2>/dev/null \
+                | base64 -d 2>/dev/null | grep -qE '^\s*schedule:'; then
+              scheduled=yes
+            fi
+
+            # Pull-request runs are excluded on purpose. A failing PR is a
+            # person's work in progress, not broken automation, and treating it
+            # as a finding would make this issue permanently open and therefore
+            # worthless.
+            latest=$(gh api "repos/$REPO/actions/workflows/$id/runs?per_page=1&status=completed&event=schedule" \
+                       --jq '.workflow_runs[0] | [.conclusion, .updated_at, .html_url] | @tsv' 2>/dev/null)
+            if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+              latest=$(gh api "repos/$REPO/actions/workflows/$id/runs?per_page=1&status=completed&branch=$default_branch&event=push" \
+                         --jq '.workflow_runs[0] | [.conclusion, .updated_at, .html_url] | @tsv' 2>/dev/null)
+            fi
+
+            if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+              # Never run on a schedule or on the default branch. Only
+              # interesting if it claims a schedule, in which case the schedule
+              # is not firing.
+              if [ "$scheduled" = "yes" ]; then
+                printf '%s\t%s\t%s\n' "$name" "never run" "$path" >> findings.txt
+              fi
+              continue
+            fi
+
+            conclusion=$(cut -f1 <<< "$latest")
+            updated=$(cut -f2 <<< "$latest")
+            url=$(cut -f3 <<< "$latest")
+
+            case "$conclusion" in
+              failure|timed_out|startup_failure)
+                printf '%s\t%s\t%s\n' "$name" "last run $conclusion" "$url" >> findings.txt
+                ;;
+            esac
+
+            if [ "$scheduled" = "yes" ]; then
+              last=$(date -u -d "$updated" +%s 2>/dev/null || echo "$now")
+              age_days=$(( (now - last) / 86400 ))
+              if [ "$age_days" -gt "$STALE_DAYS" ]; then
+                printf '%s\t%s\t%s\n' "$name" "no run in ${age_days} days" "$url" >> findings.txt
+              fi
+            fi
+          done < workflows.tsv
+
+          if [ -s findings.txt ]; then
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+            echo "Findings:"; cat findings.txt
+          else
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+            echo "All scheduled automation is green. Saying nothing."
+          fi
+
+      - name: Open or update the one maintenance issue
+        if: steps.assess.outputs.healthy == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          TITLE="[automation] Maintenance requires attention"
+
+          {
+            echo "Scheduled automation in this repository is not healthy."
+            echo
+            echo "| Workflow | Problem | Where |"
+            echo "|---|---|---|"
+            while IFS=$'\t' read -r name problem where; do
+              echo "| $name | $problem | $where |"
+            done < findings.txt
+            echo
+            echo "Pull-request runs are excluded from this check — a red PR is"
+            echo "someone's work in progress, not broken automation. Everything"
+            echo "above is a scheduled run, or a run on the default branch."
+            echo
+            echo "This issue is updated in place, never duplicated, and closes"
+            echo "itself once every row above clears. A new issue every week is how a"
+            echo "useful signal becomes something people filter."
+            echo
+            echo "_Last checked: $(date -u '+%Y-%m-%d %H:%M UTC') — \`.github/workflows/maintenance.yml\`_"
+          } > body.md
+
+          EXISTING="$(gh issue list --repo "$REPO" --state open --search "$TITLE in:title" \
+            --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)"
+
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --repo "$REPO" --body-file body.md
+            echo "updated issue #$EXISTING"
+          else
+            gh issue create --repo "$REPO" --title "$TITLE" --body-file body.md \
+              --label "automation" 2>/dev/null \
+              || gh issue create --repo "$REPO" --title "$TITLE" --body-file body.md
+          fi
+
+      - name: Close the maintenance issue once it is clean
+        if: steps.assess.outputs.healthy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          TITLE="[automation] Maintenance requires attention"
+
+          EXISTING="$(gh issue list --repo "$REPO" --state open --search "$TITLE in:title" \
+            --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)"
+
+          # Only speaks when it has something to say: the transition from broken
+          # back to working. A healthy run with no open issue prints nothing.
+          if [ -n "$EXISTING" ]; then
+            gh issue close "$EXISTING" --repo "$REPO" \
+              --comment "Scheduled automation is green again. Closed automatically; it will reopen as a new issue if something breaks."
+            echo "closed issue #$EXISTING"
+          else
+            echo "Healthy, and nothing was open. No issue, no comment, no noise."
+          fi
