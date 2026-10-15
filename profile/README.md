@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Post everywhere. Once.</strong><br>
-  Social media scheduling for Nigeria, priced in naira.
+  Social media publishing for businesses and the teams that manage their accounts.
 </p>
 
 <p align="center">
@@ -11,11 +11,7 @@
 
 ---
 
-Posting to five apps every morning is a job. Altric does it while you sleep.
-
-Upload once and publish everywhere, with a caption written for each platform
-rather than the same text pasted five times. For creators, small businesses,
-and multi-branch teams running the whole thing from a phone.
+Plan, queue and publish from one workspace. Instagram and Facebook first.
 
 ### Where things are
 

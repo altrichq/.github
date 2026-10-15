@@ -10,17 +10,10 @@ name: Maintenance health
 # any of those would be a second opinion nobody asked for and a second inbox to
 # ignore.
 #
-# The gap none of them cover is the automation itself going quiet. A scheduled
-# workflow that starts failing every week fails silently -- there is no PR, no
-# alert, and nobody opens the Actions tab of a repo that is working. The secrets
-# audit in altric-infra is the live example: without ALTRIC_REPO_TOKEN it warns
-# and exits successfully, forever, and the only evidence is a log nobody reads.
-#
-# So this job watches the watchers, and nothing else.
-#
-# It is silent when everything is healthy. It does not post "all good" and it
-# does not open a second issue for a failure it already reported -- it keeps one
-# issue, updates it in place, and closes it when the failure clears.
+# The gap none of them cover is the automation itself going quiet: a scheduled
+# workflow that starts failing fails silently. This job watches those workflows
+# and nothing else. It is silent when everything is healthy, keeps a single
+# issue per problem, updates it in place and closes it when the failure clears.
 
 on:
   workflow_call:
