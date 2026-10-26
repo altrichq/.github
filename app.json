@@ -30,7 +30,7 @@
       ],
       "groupName": "low-risk updates",
       "groupSlug": "low-risk",
-      "automerge": false
+      "automerge": true
     },
     {
       "matchPackageNames": [
@@ -44,7 +44,7 @@
         "dependencies",
         "design"
       ],
-      "automerge": false
+      "automerge": true
     }
   ]
 }

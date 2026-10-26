@@ -47,7 +47,7 @@
         "dependencies",
         "infrastructure"
       ],
-      "automerge": false,
+      "automerge": true,
       "minimumReleaseAge": "7 days"
     },
     {
@@ -65,7 +65,7 @@
         "infrastructure",
         "major"
       ],
-      "automerge": false
+      "automerge": true
     },
     {
       "matchManagers": [
@@ -77,8 +77,20 @@
         "dependencies",
         "infrastructure"
       ],
-      "automerge": false,
+      "automerge": true,
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Stateful services: an image change restarts the data, so every update waits for approval on the dependency dashboard.",
+      "matchPackageNames": [
+        "/postgres/",
+        "/redis/",
+        "/valkey/",
+        "/clickhouse/",
+        "/kafka/",
+        "/temporal/"
+      ],
+      "dependencyDashboardApproval": true
     }
   ]
 }
