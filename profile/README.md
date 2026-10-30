@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Post everywhere. Once.</strong><br>
-  Social media publishing for businesses and the teams that manage their accounts.
+  Social media publishing for businesses and the teams that run their socials.
 </p>
 
 <p align="center">
@@ -11,15 +11,15 @@
 
 ---
 
-Plan, queue and publish from one workspace. Instagram and Facebook first.
+Plan on one calendar, draft with the Assistant, review, and publish to Facebook and Instagram.
 
 ### Where things are
 
-- **The product** — [app.altric.co](https://app.altric.co)
-- **The pitch** — [altric.co](https://altric.co)
-- **Security** — found something? Report it privately through the Security tab
-  of the repository it affects, never in a public issue.
+- **The product** — [app.altric.co](https://app.altric.co) (almost ready)
+- **The company** — [altric.co](https://altric.co)
+- **Security** — found a vulnerability? Email [founders@altric.co](mailto:founders@altric.co).
+  Please don't report it in a public issue.
 
 <p align="center">
-  <sub>© Altric</sub>
+  <sub>© Altric Technologies Ltd</sub>
 </p>
